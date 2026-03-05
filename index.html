@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>Habit Tracker</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Chart.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <div class="brand-dot"></div>
+      <div>
+        <div class="brand-title">Habit Tracker</div>
+        <div class="brand-subtitle">small wins compound</div>
+      </div>
+    </div>
+
+    <nav class="top-actions">
+      <button id="tabVapes" class="chip chip--active" type="button">Vapes</button>
+      <button id="tabDrinking" class="chip" type="button">Drinking</button>
+      <button id="btnOpenSettings" class="icon-btn" type="button" aria-label="Settings">
+        ⚙️
+      </button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- VAPES -->
+    <section id="sectionVapes" class="section section--active" aria-label="Vapes section">
+      <div class="grid">
+        <div class="card">
+          <div class="card-header">
+            <h2>Today</h2>
+            <div class="muted" id="todayLabel"></div>
+          </div>
+
+          <div class="big-number">
+            <div class="big-number__label">Vape hits</div>
+            <div class="big-number__value" id="todayVapes">0</div>
+            <div class="big-number__meta" id="todayGoalMeta">Goal: —</div>
+          </div>
+
+          <div class="row row--wrap">
+            <button id="btnAddVape" class="btn btn--primary" type="button">+ Add hit</button>
+            <button id="btnDelay" class="btn" type="button">⏱ Delay</button>
+            <button id="btnAvoided" class="btn" type="button">✅ Craving avoided</button>
+          </div>
+
+          <div class="delay-box" id="delayBox" hidden>
+            <div class="delay-box__title">Delay active</div>
+            <div class="delay-box__time" id="delayCountdown">--:--</div>
+            <div class="delay-box__hint">“Add hit” is locked until the timer ends.</div>
+            <div class="row">
+              <button id="btnCancelDelay" class="btn btn--danger" type="button">Cancel delay</button>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="row row--wrap">
+            <button id="btnUndoVape" class="btn btn--ghost" type="button">↩ Undo last hit</button>
+            <button id="btnClearTodayVapes" class="btn btn--ghost" type="button">🧹 Clear today</button>
+          </div>
+
+          <div class="mini-metrics">
+            <div class="mini">
+              <div class="mini__label">Cravings avoided</div>
+              <div class="mini__value" id="todayAvoided">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Stats</h2>
+            <div class="muted">Auto-calculated</div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="stat__label">Streak (days ≤ goal)</div>
+              <div class="stat__value" id="vapeStreak">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">This month spend</div>
+              <div class="stat__value" id="monthSpend">$0.00</div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">Lifetime hits</div>
+              <div class="stat__value" id="lifeHits">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">Lifetime spend</div>
+              <div class="stat__value" id="lifeSpend">$0.00</div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">Lifetime cravings avoided</div>
+              <div class="stat__value" id="lifeAvoided">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card--wide">
+          <div class="card-header">
+            <h2>Vape hits trend</h2>
+            <div class="row row--wrap">
+              <select id="rangeSelect" class="select" aria-label="Graph range">
+                <option value="10">Last 10 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="all">All time</option>
+              </select>
+              <button id="btnRefreshChart" class="btn btn--ghost" type="button">Refresh</button>
+            </div>
+          </div>
+
+          <div class="chart-wrap">
+            <canvas id="vapeChart" height="120"></canvas>
+          </div>
+
+          <div class="muted small">
+            Tip: if dates feel cramped on long ranges, stick to 30/90 or “All time” line.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DRINKING -->
+    <section id="sectionDrinking" class="section" aria-label="Drinking section">
+      <div class="grid">
+        <div class="card">
+          <div class="card-header">
+            <h2>Today</h2>
+            <div class="muted" id="todayLabel2"></div>
+          </div>
+
+          <div class="row row--wrap">
+            <button id="btnToggleSolo" class="btn" type="button">🍺 Solo drink: <span id="soloState">No</span></button>
+            <button id="btnToggleBlackout" class="btn" type="button">🚫 Bad blackout: <span id="blackoutState">No</span></button>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="stats-grid">
+            <div class="stat">
+              <div class="stat__label">Days since solo drink</div>
+              <div class="stat__value" id="daysSinceSolo">—</div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">Days since blackout</div>
+              <div class="stat__value" id="daysSinceBlackout">—</div>
+            </div>
+          </div>
+
+          <div class="muted small">
+            These are calculated from your log. Marking today “Yes” sets the counter to 0.
+          </div>
+        </div>
+
+        <div class="card card--wide">
+          <div class="card-header">
+            <h2>Last 3 months</h2>
+            <div class="muted">Heatmap calendar</div>
+          </div>
+          <div id="heatmapLegend" class="legend"></div>
+          <div id="heatmap" class="heatmap" aria-label="Drinking heatmap"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- SETTINGS MODAL -->
+  <div id="modalBackdrop" class="modal-backdrop" hidden></div>
+  <div id="settingsModal" class="modal" role="dialog" aria-modal="true" aria-label="Settings" hidden>
+    <div class="modal__header">
+      <h2>Settings</h2>
+      <button id="btnCloseSettings" class="icon-btn" type="button" aria-label="Close">✖️</button>
+    </div>
+
+    <div class="modal__body">
+      <div class="form-grid">
+        <label class="field">
+          <span>Vapes: Daily goal (hits)</span>
+          <input id="inpDailyGoal" type="number" min="0" step="1" />
+        </label>
+
+        <label class="field">
+          <span>Vapes: Price per hit ($)</span>
+          <input id="inpVapePrice" type="number" min="0" step="0.01" />
+        </label>
+
+        <label class="field">
+          <span>Vapes: Delay length (minutes)</span>
+          <input id="inpDelayMins" type="number" min="1" step="1" />
+        </label>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="row row--wrap">
+        <button id="btnSaveSettings" class="btn btn--primary" type="button">Save</button>
+        <button id="btnResetApp" class="btn btn--danger" type="button">Reset ALL data</button>
+      </div>
+
+      <div class="muted small">
+        Reset wipes local storage on this device.
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
