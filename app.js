@@ -1,7 +1,7 @@
 /* Habit Tracker PWA
    - Single source of truth: localStorage JSON state
    - Vapes: hits per day, avoided cravings, delay lockout, settings, trend chart
-   - Drinking: per-day flags for solo + blackout, days-since metrics, 3-month heatmap
+   - Drinking: per-day flags for solo + blackout, days-since metrics, 3-month Sun–Sat calendar
 */
 
 const STORAGE_KEY = "habit_tracker_state_v1";
@@ -32,13 +32,14 @@ function defaultState() {
   return {
     settings: {
       vapeDailyGoal: 10,
-      vapePricePerHit: 0.50,
+      vapeDevicePrice: 13.00,
+      daysPerVape: 3,
       delayMinutes: 20,
     },
     vapes: {
       // per day: { hits: number, avoided: number, events: [{t:number, type:"hit"|"avoid"}] }
       days: {},
-      delayEndTs: 0, // epoch ms; Add Hit locked if now < delayEndTs
+      delayEndTs: 0,
     },
     drinking: {
       // per day: { solo: boolean, blackout: boolean }
@@ -52,7 +53,6 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
-    // light merge to keep compatibility
     const base = defaultState();
     return {
       ...base,
@@ -109,8 +109,11 @@ const soloStateEl = el("soloState");
 const blackoutStateEl = el("blackoutState");
 const daysSinceSoloEl = el("daysSinceSolo");
 const daysSinceBlackoutEl = el("daysSinceBlackout");
-const heatmap = el("heatmap");
-const heatmapLegend = el("heatmapLegend");
+
+const btnLogToday = el("btnLogToday");
+const btnLogYesterday = el("btnLogYesterday");
+const activeDrinkLabel = el("activeDrinkLabel");
+const drinkCalendar = el("drinkCalendar");
 
 /* Settings modal */
 const btnOpenSettings = el("btnOpenSettings");
@@ -119,13 +122,15 @@ const modalBackdrop = el("modalBackdrop");
 const settingsModal = el("settingsModal");
 
 const inpDailyGoal = el("inpDailyGoal");
-const inpVapePrice = el("inpVapePrice");
+const inpVapeDevicePrice = el("inpVapeDevicePrice");
+const inpDaysPerVape = el("inpDaysPerVape");
 const inpDelayMins = el("inpDelayMins");
 const btnSaveSettings = el("btnSaveSettings");
 const btnResetApp = el("btnResetApp");
 
 /* ---------- State ---------- */
 let state = loadState();
+let activeDrinkISO = todayISO();
 
 /* ---------- Tabs ---------- */
 function setTab(which) {
@@ -140,9 +145,9 @@ tabDrinking.addEventListener("click", () => setTab("drinking"));
 
 /* ---------- Modal ---------- */
 function openSettings() {
-  // populate inputs
   inpDailyGoal.value = state.settings.vapeDailyGoal;
-  inpVapePrice.value = state.settings.vapePricePerHit;
+  inpVapeDevicePrice.value = state.settings.vapeDevicePrice;
+  inpDaysPerVape.value = state.settings.daysPerVape;
   inpDelayMins.value = state.settings.delayMinutes;
 
   modalBackdrop.hidden = false;
@@ -158,11 +163,13 @@ modalBackdrop.addEventListener("click", closeSettings);
 
 btnSaveSettings.addEventListener("click", () => {
   const goal = clamp(parseInt(inpDailyGoal.value || "0", 10), 0, 9999);
-  const price = clamp(parseFloat(inpVapePrice.value || "0"), 0, 999999);
+  const devicePrice = clamp(parseFloat(inpVapeDevicePrice.value || "0"), 0, 999999);
+  const daysPer = clamp(parseInt(inpDaysPerVape.value || "1", 10), 1, 9999);
   const mins = clamp(parseInt(inpDelayMins.value || "1", 10), 1, 9999);
 
   state.settings.vapeDailyGoal = goal;
-  state.settings.vapePricePerHit = price;
+  state.settings.vapeDevicePrice = devicePrice;
+  state.settings.daysPerVape = daysPer;
   state.settings.delayMinutes = mins;
 
   saveState();
@@ -174,6 +181,7 @@ btnResetApp.addEventListener("click", () => {
   const ok = confirm("Reset ALL data? This wipes everything on this device.");
   if (!ok) return;
   state = defaultState();
+  activeDrinkISO = todayISO();
   saveState();
   renderAll();
   closeSettings();
@@ -207,7 +215,6 @@ function undoLastHit() {
   const iso = todayISO();
   const d = getVapeDay(iso);
 
-  // Remove last "hit" event if exists, otherwise decrement hits if > 0
   for (let i = d.events.length - 1; i >= 0; i--) {
     if (d.events[i].type === "hit") {
       d.events.splice(i, 1);
@@ -224,7 +231,7 @@ function undoLastHit() {
   }
 }
 function clearTodayVapes() {
-  const ok = confirm("Clear today's vape hits + avoided cravings?");
+  const ok = confirm("Clear today's vape hits + avoided?");
   if (!ok) return;
   const iso = todayISO();
   state.vapes.days[iso] = { hits: 0, avoided: 0, events: [] };
@@ -254,7 +261,6 @@ function renderDelayUI() {
 
   btnAddVape.disabled = active;
   btnDelay.disabled = active;
-
   delayBox.hidden = !active;
 
   if (delayInterval) {
@@ -270,10 +276,7 @@ function renderDelayUI() {
     const mm = String(Math.floor(s / 60)).padStart(2, "0");
     const ss = String(s % 60).padStart(2, "0");
     delayCountdown.textContent = `${mm}:${ss}`;
-
-    if (remaining <= 0) {
-      cancelDelay(); // will re-render
-    }
+    if (remaining <= 0) cancelDelay();
   };
 
   tick();
@@ -286,44 +289,41 @@ function allVapeDatesSorted() {
 }
 function calcVapeStreak() {
   const goal = state.settings.vapeDailyGoal;
-  const dates = allVapeDatesSorted();
-  if (dates.length === 0) return 0;
-
-  // streak counts backwards from today; missing day breaks streak.
   const today = todayISO();
   let streak = 0;
 
   for (let offset = 0; offset < 3650; offset++) {
     const dISO = todayISO(new Date(parseISO(today).getTime() - offset*24*60*60*1000));
     const day = state.vapes.days[dISO];
-    if (!day) break; // missing day breaks
+    if (!day) break; // missing day breaks streak (your original behavior)
     if ((day.hits || 0) <= goal) streak += 1;
     else break;
   }
   return streak;
 }
+
 function calcLifetime() {
   let hits = 0, avoided = 0;
+  const daysTracked = Object.keys(state.vapes.days).length;
+
   for (const iso of Object.keys(state.vapes.days)) {
     hits += state.vapes.days[iso]?.hits || 0;
     avoided += state.vapes.days[iso]?.avoided || 0;
   }
-  const spend = hits * state.settings.vapePricePerHit;
+
+  const estPerDay = state.settings.vapeDevicePrice / state.settings.daysPerVape;
+  const spend = estPerDay * daysTracked;
+
   return { hits, avoided, spend };
 }
-function calcThisMonthSpend() {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth(); // 0-based
-  let hits = 0;
 
-  for (const iso of Object.keys(state.vapes.days)) {
-    const d = parseISO(iso);
-    if (d.getFullYear() === y && d.getMonth() === m) {
-      hits += state.vapes.days[iso]?.hits || 0;
-    }
-  }
-  return hits * state.settings.vapePricePerHit;
+function dayOfMonth() {
+  return new Date().getDate();
+}
+function calcThisMonthSpendEst() {
+  const daily = state.settings.vapeDevicePrice / state.settings.daysPerVape;
+  const elapsed = dayOfMonth();
+  return daily * elapsed;
 }
 
 /* ---------- Chart ---------- */
@@ -336,7 +336,7 @@ function buildSeries(rangeValue) {
   let useDates = dates;
 
   if (rangeValue !== "all") {
-    const n = parseInt(rangeValue, 10);
+    const n = parseInt(rangeValue, 10); // "7" works the same as "30"
     const end = todayISO();
     const startDate = new Date(parseISO(end).getTime() - (n - 1) * 24*60*60*1000);
 
@@ -354,38 +354,37 @@ function buildSeries(rangeValue) {
 }
 
 function renderChart() {
-  const range = rangeSelect.value;
+  const range = rangeSelect.value; // "7", "30", "90", or "all"
   const { labels, values } = buildSeries(range);
 
-  const ctx = document.getElementById("vapeChart").getContext("2d");
+  const canvas = document.getElementById("vapeChart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
 
   if (vapeChart) vapeChart.destroy();
 
+  const isBar = range === "7";
+  const isAll = range === "all";
+  const pointRadius = (isBar || isAll) ? 0 : 2;
+
   vapeChart = new Chart(ctx, {
-    type: "line",
+    type: isBar ? "bar" : "line",
     data: {
       labels,
       datasets: [{
         label: "Hits",
         data: values,
-        tension: 0.25,
-        pointRadius: range === "all" ? 0 : 2,
+        tension: isBar ? 0 : 0.25,
+        pointRadius
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: { enabled: true }
-      },
+      plugins: { legend: { display: false }, tooltip: { enabled: true } },
       scales: {
         x: {
-          ticks: {
-            maxRotation: 0,
-            autoSkip: true,
-            maxTicksLimit: range === "10" ? 10 : (range === "30" ? 10 : 12),
-          },
+          ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: isBar ? 7 : (range === "30" ? 10 : 12) },
           grid: { display: false }
         },
         y: {
@@ -398,31 +397,11 @@ function renderChart() {
   });
 }
 
-btnRefreshChart.addEventListener("click", renderChart);
-
 /* ---------- Drinking ---------- */
 function getDrinkDay(iso) {
   if (!state.drinking.days[iso]) state.drinking.days[iso] = { solo: false, blackout: false };
   return state.drinking.days[iso];
 }
-
-function toggleSoloToday() {
-  const iso = todayISO();
-  const d = getDrinkDay(iso);
-  d.solo = !d.solo;
-  saveState();
-  renderAll();
-}
-function toggleBlackoutToday() {
-  const iso = todayISO();
-  const d = getDrinkDay(iso);
-  d.blackout = !d.blackout;
-  saveState();
-  renderAll();
-}
-
-btnToggleSolo.addEventListener("click", toggleSoloToday);
-btnToggleBlackout.addEventListener("click", toggleBlackoutToday);
 
 function findMostRecent(flagKey) {
   const dates = Object.keys(state.drinking.days).sort();
@@ -435,77 +414,125 @@ function findMostRecent(flagKey) {
 function calcDaysSince(flagKey) {
   const recent = findMostRecent(flagKey);
   if (!recent) return "∞";
-  const t = todayISO();
-  return String(daysBetween(recent, t));
+  return String(daysBetween(recent, todayISO()));
 }
 
-/* Heatmap: last 3 months (approx 92 days) */
-function heatColor(iso) {
+function toggleSoloForActiveDay() {
+  const d = getDrinkDay(activeDrinkISO);
+  d.solo = !d.solo;
+  saveState();
+  renderAll();
+}
+function toggleBlackoutForActiveDay() {
+  const d = getDrinkDay(activeDrinkISO);
+  d.blackout = !d.blackout;
+  saveState();
+  renderAll();
+}
+
+function drinkDayColor(iso) {
   const d = state.drinking.days[iso];
   if (!d) return "rgba(255,255,255,0.04)";
   if (d.blackout) return "rgba(255,90,90,0.35)";
   if (d.solo) return "rgba(255,200,90,0.25)";
   return "rgba(120,255,220,0.12)";
 }
-function renderHeatmapLegend() {
-  heatmapLegend.innerHTML = "";
-  const items = [
-    { label: "None logged", color: "rgba(255,255,255,0.04)" },
-    { label: "Good day (no solo / blackout)", color: "rgba(120,255,220,0.12)" },
-    { label: "Solo drink", color: "rgba(255,200,90,0.25)" },
-    { label: "Bad blackout", color: "rgba(255,90,90,0.35)" },
-  ];
-  for (const it of items) {
-    const wrap = document.createElement("div");
-    wrap.className = "legend-item";
-    const sw = document.createElement("div");
-    sw.className = "legend-swatch";
-    sw.style.background = it.color;
-    wrap.appendChild(sw);
-    const tx = document.createElement("div");
-    tx.textContent = it.label;
-    wrap.appendChild(tx);
-    heatmapLegend.appendChild(wrap);
-  }
+
+function monthStart(dateObj) {
+  return new Date(dateObj.getFullYear(), dateObj.getMonth(), 1);
+}
+function monthEnd(dateObj) {
+  return new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0);
+}
+function addMonths(dateObj, delta) {
+  return new Date(dateObj.getFullYear(), dateObj.getMonth() + delta, 1);
 }
 
-function renderHeatmap() {
-  heatmap.innerHTML = "";
-  renderHeatmapLegend();
+function renderDrinkCalendar3Months() {
+  if (!drinkCalendar) return;
 
-  const end = parseISO(todayISO());
-  const start = new Date(end.getTime() - 91 * 24*60*60*1000);
+  drinkCalendar.innerHTML = "";
 
-  for (let i = 0; i < 92; i++) {
-    const d = new Date(start.getTime() + i * 24*60*60*1000);
-    const iso = todayISO(d);
+  const now = parseISO(todayISO());
+  const curStart = monthStart(now);
+  const prev1Start = addMonths(curStart, -1);
+  const prev2Start = addMonths(curStart, -2);
 
-    const cell = document.createElement("div");
-    cell.className = "day";
-    cell.style.background = heatColor(iso);
-    cell.title = iso;
+  const months = [
+    { start: prev2Start, end: monthEnd(prev2Start), isCurrent: false },
+    { start: prev1Start, end: monthEnd(prev1Start), isCurrent: false },
+    { start: curStart,  end: now,                 isCurrent: true  }, // through today
+  ];
 
-    const month = document.createElement("div");
-    month.className = "m";
-    month.textContent = (d.getDate() === 1) ? d.toLocaleString(undefined, { month: "short" }) : "";
-    cell.appendChild(month);
+  const weekdayLabels = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-    const num = document.createElement("div");
-    num.className = "d";
-    num.textContent = String(d.getDate());
-    cell.appendChild(num);
+  for (const m of months) {
+    const wrap = document.createElement("div");
+    wrap.className = "month";
 
-    cell.addEventListener("click", () => {
-      const day = getDrinkDay(iso);
-      // Cycle: none -> solo -> blackout -> none
-      if (!day.solo && !day.blackout) { day.solo = true; day.blackout = false; }
-      else if (day.solo && !day.blackout) { day.solo = false; day.blackout = true; }
-      else { day.solo = false; day.blackout = false; }
-      saveState();
-      renderAll();
-    });
+    const header = document.createElement("div");
+    header.className = "month-header";
 
-    heatmap.appendChild(cell);
+    const title = document.createElement("div");
+    title.className = "month-title";
+    title.textContent = m.start.toLocaleString(undefined, { month: "long", year: "numeric" });
+
+    const sub = document.createElement("div");
+    sub.className = "month-sub";
+    sub.textContent = m.isCurrent ? "Through today" : "Full month";
+
+    header.appendChild(title);
+    header.appendChild(sub);
+    wrap.appendChild(header);
+
+    const weekdays = document.createElement("div");
+    weekdays.className = "weekdays";
+    for (const w of weekdayLabels) {
+      const x = document.createElement("div");
+      x.className = "weekday";
+      x.textContent = w;
+      weekdays.appendChild(x);
+    }
+    wrap.appendChild(weekdays);
+
+    const grid = document.createElement("div");
+    grid.className = "month-grid";
+
+    // blanks until first weekday
+    const firstDow = new Date(m.start.getFullYear(), m.start.getMonth(), 1).getDay(); // 0=Sun
+    for (let i = 0; i < firstDow; i++) {
+      const blank = document.createElement("div");
+      blank.className = "cal-day cal-day--blank";
+      grid.appendChild(blank);
+    }
+
+    const lastDay = m.isCurrent ? m.end.getDate() : monthEnd(m.start).getDate();
+    for (let day = 1; day <= lastDay; day++) {
+      const dObj = new Date(m.start.getFullYear(), m.start.getMonth(), day);
+      const iso = todayISO(dObj);
+
+      const cell = document.createElement("div");
+      cell.className = "cal-day";
+      cell.style.background = drinkDayColor(iso);
+      cell.title = iso;
+
+      if (iso === activeDrinkISO) cell.classList.add("cal-day--selected");
+
+      const num = document.createElement("div");
+      num.className = "cal-num";
+      num.textContent = String(day);
+      cell.appendChild(num);
+
+      cell.addEventListener("click", () => {
+        activeDrinkISO = iso;
+        renderAll();
+      });
+
+      grid.appendChild(cell);
+    }
+
+    wrap.appendChild(grid);
+    drinkCalendar.appendChild(wrap);
   }
 }
 
@@ -523,12 +550,12 @@ function renderVapes() {
   todayVapesEl.textContent = String(d.hits || 0);
   todayAvoidedEl.textContent = String(d.avoided || 0);
 
-  todayGoalMeta.textContent = `Goal: ${state.settings.vapeDailyGoal} hits • $${state.settings.vapePricePerHit.toFixed(2)}/hit`;
+  const estPerDay = state.settings.vapeDevicePrice / state.settings.daysPerVape;
+  todayGoalMeta.textContent = `Goal: ${state.settings.vapeDailyGoal} • Est/day: ${fmtMoney(estPerDay)}`;
 
   vapeStreakEl.textContent = String(calcVapeStreak());
 
-  const monthSpend = calcThisMonthSpend();
-  monthSpendEl.textContent = fmtMoney(monthSpend);
+  monthSpendEl.textContent = fmtMoney(calcThisMonthSpendEst());
 
   const life = calcLifetime();
   lifeHitsEl.textContent = String(life.hits);
@@ -539,8 +566,9 @@ function renderVapes() {
 }
 
 function renderDrinking() {
-  const iso = todayISO();
-  const d = getDrinkDay(iso);
+  // Ensure active day exists
+  getDrinkDay(activeDrinkISO);
+  const d = state.drinking.days[activeDrinkISO];
 
   soloStateEl.textContent = d.solo ? "Yes" : "No";
   blackoutStateEl.textContent = d.blackout ? "Yes" : "No";
@@ -548,7 +576,12 @@ function renderDrinking() {
   daysSinceSoloEl.textContent = calcDaysSince("solo");
   daysSinceBlackoutEl.textContent = calcDaysSince("blackout");
 
-  renderHeatmap();
+  if (activeDrinkLabel) {
+    const label = parseISO(activeDrinkISO).toLocaleDateString(undefined, { month:"short", day:"numeric", year:"numeric" });
+    activeDrinkLabel.textContent = `Editing: ${label}`;
+  }
+
+  renderDrinkCalendar3Months();
 }
 
 function renderAll() {
@@ -568,6 +601,20 @@ btnDelay.addEventListener("click", startDelay);
 btnCancelDelay.addEventListener("click", cancelDelay);
 
 rangeSelect.addEventListener("change", renderChart);
+btnRefreshChart.addEventListener("click", renderChart);
+
+btnToggleSolo.addEventListener("click", toggleSoloForActiveDay);
+btnToggleBlackout.addEventListener("click", toggleBlackoutForActiveDay);
+
+btnLogToday.addEventListener("click", () => {
+  activeDrinkISO = todayISO();
+  renderAll();
+});
+btnLogYesterday.addEventListener("click", () => {
+  const y = new Date(parseISO(todayISO()).getTime() - 24*60*60*1000);
+  activeDrinkISO = todayISO(y);
+  renderAll();
+});
 
 /* ---------- PWA service worker ---------- */
 if ("serviceWorker" in navigator) {

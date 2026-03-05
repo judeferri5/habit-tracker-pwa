@@ -10,8 +10,10 @@
   <link rel="stylesheet" href="styles.css" />
 
   <!-- App Icons -->
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-180.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <!-- Chart.js (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -30,9 +32,7 @@
     <nav class="top-actions">
       <button id="tabVapes" class="chip chip--active" type="button">Vapes</button>
       <button id="tabDrinking" class="chip" type="button">Drinking</button>
-      <button id="btnOpenSettings" class="icon-btn" type="button" aria-label="Settings">
-        ⚙️
-      </button>
+      <button id="btnOpenSettings" class="icon-btn" type="button" aria-label="Settings">⚙️</button>
     </nav>
   </header>
 
@@ -52,10 +52,10 @@
             <div class="big-number__meta" id="todayGoalMeta">Goal: —</div>
           </div>
 
-          <div class="row row--wrap">
-            <button id="btnAddVape" class="btn btn--primary" type="button">+ Add hit</button>
-            <button id="btnDelay" class="btn" type="button">⏱ Delay</button>
-            <button id="btnAvoided" class="btn" type="button">✅ Craving avoided</button>
+          <div class="actions-3">
+            <button id="btnAddVape" class="btn btn--primary btn--xl" type="button">+ Add hit</button>
+            <button id="btnDelay" class="btn btn--xl btn--accent" type="button">⏱ Delay</button>
+            <button id="btnAvoided" class="btn btn--xl btn--good" type="button">✅ Avoided</button>
           </div>
 
           <div class="delay-box" id="delayBox" hidden>
@@ -70,13 +70,13 @@
           <div class="divider"></div>
 
           <div class="row row--wrap">
-            <button id="btnUndoVape" class="btn btn--ghost" type="button">↩ Undo last hit</button>
+            <button id="btnUndoVape" class="btn btn--ghost" type="button">↩ Undo last</button>
             <button id="btnClearTodayVapes" class="btn btn--ghost" type="button">🧹 Clear today</button>
           </div>
 
           <div class="mini-metrics">
             <div class="mini">
-              <div class="mini__label">Cravings avoided</div>
+              <div class="mini__label">Avoided</div>
               <div class="mini__value" id="todayAvoided">0</div>
             </div>
           </div>
@@ -85,28 +85,28 @@
         <div class="card">
           <div class="card-header">
             <h2>Stats</h2>
-            <div class="muted">Auto-calculated</div>
+            <div class="muted">Auto</div>
           </div>
 
           <div class="stats-grid">
             <div class="stat">
-              <div class="stat__label">Streak (days ≤ goal)</div>
+              <div class="stat__label">Streak</div>
               <div class="stat__value" id="vapeStreak">0</div>
             </div>
             <div class="stat">
-              <div class="stat__label">This month spend</div>
+              <div class="stat__label">Month $</div>
               <div class="stat__value" id="monthSpend">$0.00</div>
             </div>
             <div class="stat">
-              <div class="stat__label">Lifetime hits</div>
+              <div class="stat__label">Lifetime</div>
               <div class="stat__value" id="lifeHits">0</div>
             </div>
             <div class="stat">
-              <div class="stat__label">Lifetime spend</div>
+              <div class="stat__label">Lifetime $</div>
               <div class="stat__value" id="lifeSpend">$0.00</div>
             </div>
             <div class="stat">
-              <div class="stat__label">Lifetime cravings avoided</div>
+              <div class="stat__label">Avoided</div>
               <div class="stat__value" id="lifeAvoided">0</div>
             </div>
           </div>
@@ -117,9 +117,9 @@
             <h2>Vape hits trend</h2>
             <div class="row row--wrap">
               <select id="rangeSelect" class="select" aria-label="Graph range">
-                <option value="10">Last 10 days</option>
-                <option value="30" selected>Last 30 days</option>
-                <option value="90">Last 90 days</option>
+                <option value="7" selected>Last 7 days</option>
+                <option value="30">Last 30</option>
+                <option value="90">Last 90</option>
                 <option value="all">All time</option>
               </select>
               <button id="btnRefreshChart" class="btn btn--ghost" type="button">Refresh</button>
@@ -131,7 +131,7 @@
           </div>
 
           <div class="muted small">
-            Tip: if dates feel cramped on long ranges, stick to 30/90 or “All time” line.
+            7 days = bars. Longer ranges = line.
           </div>
         </div>
       </div>
@@ -142,20 +142,26 @@
       <div class="grid">
         <div class="card">
           <div class="card-header">
-            <h2>Today</h2>
+            <h2>Log</h2>
             <div class="muted" id="todayLabel2"></div>
           </div>
 
           <div class="row row--wrap">
-            <button id="btnToggleSolo" class="btn" type="button">🍺 Solo drink: <span id="soloState">No</span></button>
-            <button id="btnToggleBlackout" class="btn" type="button">🚫 Bad blackout: <span id="blackoutState">No</span></button>
+            <button id="btnToggleSolo" class="btn" type="button">🍺 Solo: <span id="soloState">No</span></button>
+            <button id="btnToggleBlackout" class="btn" type="button">🚫 Blackout: <span id="blackoutState">No</span></button>
+          </div>
+
+          <div class="row row--wrap" style="margin-top:10px;">
+            <button id="btnLogToday" class="btn btn--ghost" type="button">Log: Today</button>
+            <button id="btnLogYesterday" class="btn btn--ghost" type="button">Log: Yesterday</button>
+            <div class="muted" id="activeDrinkLabel" style="margin-left:auto;"></div>
           </div>
 
           <div class="divider"></div>
 
           <div class="stats-grid">
             <div class="stat">
-              <div class="stat__label">Days since solo drink</div>
+              <div class="stat__label">Days since solo</div>
               <div class="stat__value" id="daysSinceSolo">—</div>
             </div>
             <div class="stat">
@@ -165,17 +171,17 @@
           </div>
 
           <div class="muted small">
-            These are calculated from your log. Marking today “Yes” sets the counter to 0.
+            Tap a day in the calendar to edit it.
           </div>
         </div>
 
         <div class="card card--wide">
           <div class="card-header">
-            <h2>Last 3 months</h2>
-            <div class="muted">Heatmap calendar</div>
+            <h2>Calendar</h2>
+            <div class="muted">Previous 2 months + current month</div>
           </div>
-          <div id="heatmapLegend" class="legend"></div>
-          <div id="heatmap" class="heatmap" aria-label="Drinking heatmap"></div>
+
+          <div id="drinkCalendar" class="drink-calendar" aria-label="Drinking calendar"></div>
         </div>
       </div>
     </section>
@@ -197,8 +203,13 @@
         </label>
 
         <label class="field">
-          <span>Vapes: Price per hit ($)</span>
-          <input id="inpVapePrice" type="number" min="0" step="0.01" />
+          <span>Vapes: Price per vape ($)</span>
+          <input id="inpVapeDevicePrice" type="number" min="0" step="0.01" />
+        </label>
+
+        <label class="field">
+          <span>Vapes: Days per vape (your pace)</span>
+          <input id="inpDaysPerVape" type="number" min="1" step="1" />
         </label>
 
         <label class="field">
