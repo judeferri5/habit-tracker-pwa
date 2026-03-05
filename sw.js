@@ -1,6 +1,6 @@
 // Network-first for HTML so updates show immediately.
 // Bump CACHE_NAME when you want to force-refresh all cached assets.
-const CACHE_NAME = "habit-tracker-cache-v4";
+const CACHE_NAME = "habit-tracker-cache-v5";
 
 const ASSETS = [
   "./",
