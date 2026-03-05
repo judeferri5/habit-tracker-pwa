@@ -617,8 +617,29 @@ btnLogYesterday.addEventListener("click", () => {
 });
 
 /* ---------- PWA service worker ---------- */
+// DEV MODE: disable service worker + clear SW caches to avoid update headaches
+const DEV_MODE = true;
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
+  window.addEventListener("load", async () => {
+    if (DEV_MODE) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map(r => r.unregister()));
+      } catch {}
+
+      // Clear Cache Storage used by previous service workers
+      try {
+        if ("caches" in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+      } catch {}
+
+      return; // do NOT register a service worker in dev mode
+    }
+
+    // PROD MODE:
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   });
 }
