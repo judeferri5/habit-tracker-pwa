@@ -1,18 +1,20 @@
-// Network-first for HTML so updates show immediately.
-// Bump CACHE_NAME when you want to force-refresh all cached assets.
-const CACHE_NAME = "habit-tracker-cache-v5";
+// DEV MODE Service Worker
+// Goal: always pull latest HTML/CSS/JS so you don't fight cache while iterating.
 
-const ASSETS = [
+const CACHE_NAME = "habit-tracker-dev-cache";
+
+// Cache minimal assets (optional). Icons can be cached safely.
+const SAFE_ASSETS = [
   "./",
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.webmanifest"
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/apple-touch-icon-180.png",
+  "./icons/favicon-32.png"
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(SAFE_ASSETS)).catch(() => {})
   );
   self.skipWaiting();
 });
@@ -28,22 +30,27 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
+  const url = new URL(req.url);
 
-  // For page navigations: try network first, fall back to cache
-  if (req.mode === "navigate") {
+  const isNavigate = req.mode === "navigate";
+
+  // Always fetch latest for core files (prevents “stuck on old version”)
+  const isCore =
+    isNavigate ||
+    url.pathname.endsWith("/index.html") ||
+    url.pathname.endsWith("/styles.css") ||
+    url.pathname.endsWith("/app.js") ||
+    url.pathname.endsWith("/manifest.webmanifest") ||
+    url.pathname.endsWith("/sw.js");
+
+  if (isCore) {
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("./index.html", copy));
-          return res;
-        })
-        .catch(() => caches.match("./index.html"))
+      fetch(req, { cache: "no-store" }).catch(() => caches.match(req))
     );
     return;
   }
 
-  // For assets: cache-first, then network
+  // For everything else: cache-first (fine for icons)
   event.respondWith(
     caches.match(req).then((cached) => cached || fetch(req))
   );
