@@ -126,11 +126,12 @@ const btnOpenPurchase = el("btnOpenPurchase");
 
 const vapeStreakEl = el("vapeStreak");
 const monthSpendEl = el("monthSpend");
+const bought30El = el("bought30");
+const spend30El = el("spend30");
 const lifeHitsEl = el("lifeHits");
 const lifeSpendEl = el("lifeSpend");
 const lifeAvoidedEl = el("lifeAvoided");
 const lifeBoughtEl = el("lifeBought");
-const avgPerVapeEl = el("avgPerVape");
 const lastPurchaseEl = el("lastPurchase");
 const lastPurchaseMiniEl = el("lastPurchaseMini");
 
@@ -435,13 +436,19 @@ function calcVapeStreak() {
 
 function calcPurchaseStats() {
   const purchases = [...state.vapes.purchases].sort((a, b) => a.date.localeCompare(b.date));
+
   const now = new Date();
+  const today = todayISO();
+  const thirtyDaysAgo = todayISO(new Date(parseISO(today).getTime() - 29 * 24 * 60 * 60 * 1000));
+
   const y = now.getFullYear();
   const m = now.getMonth();
 
   let monthSpend = 0;
   let totalSpend = 0;
   let totalQty = 0;
+  let spend30 = 0;
+  let bought30 = 0;
 
   for (const p of purchases) {
     totalSpend += p.totalPrice;
@@ -451,13 +458,19 @@ function calcPurchaseStats() {
     if (d.getFullYear() === y && d.getMonth() === m) {
       monthSpend += p.totalPrice;
     }
+
+    if (p.date >= thirtyDaysAgo) {
+      spend30 += p.totalPrice;
+      bought30 += p.quantity;
+    }
   }
 
   return {
     monthSpend,
     totalSpend,
     totalQty,
-    avgPerVape: totalQty > 0 ? totalSpend / totalQty : null,
+    spend30,
+    bought30,
     lastPurchaseDate: purchases.length ? purchases[purchases.length - 1].date : null
   };
 }
@@ -727,11 +740,12 @@ function renderVapes() {
   const purchaseStats = calcPurchaseStats();
 
   monthSpendEl.textContent = fmtMoney(purchaseStats.monthSpend);
+  bought30El.textContent = String(purchaseStats.bought30);
+  spend30El.textContent = fmtMoney(purchaseStats.spend30);
   lifeHitsEl.textContent = String(hitStats.hits);
   lifeSpendEl.textContent = fmtMoney(purchaseStats.totalSpend);
   lifeAvoidedEl.textContent = String(hitStats.avoided);
   lifeBoughtEl.textContent = String(purchaseStats.totalQty);
-  avgPerVapeEl.textContent = purchaseStats.avgPerVape == null ? "—" : fmtMoney(purchaseStats.avgPerVape);
   lastPurchaseEl.textContent = formatDateLabel(purchaseStats.lastPurchaseDate);
   lastPurchaseMiniEl.textContent = formatDateLabel(purchaseStats.lastPurchaseDate);
 

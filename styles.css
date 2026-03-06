@@ -283,11 +283,19 @@ h2{
 .stats-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
-  gap:8px;
+  gap:10px;
 }
 
-@media (max-width:420px){
-  .stats-grid{ grid-template-columns:1fr; }
+.drinking-stats-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+
+@media (max-width:360px){
+  .drinking-stats-grid{
+    grid-template-columns:1fr;
+  }
 }
 
 .stat{

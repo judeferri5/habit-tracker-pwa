@@ -96,6 +96,7 @@
           </div>
 
           <div class="stats-grid">
+            <!-- Row 1 -->
             <div class="stat">
               <div class="stat__label">Streak</div>
               <div class="stat__value" id="vapeStreak">0</div>
@@ -104,6 +105,18 @@
               <div class="stat__label">Month $</div>
               <div class="stat__value" id="monthSpend">$0.00</div>
             </div>
+
+            <!-- Row 2 -->
+            <div class="stat">
+              <div class="stat__label">Bought (30d)</div>
+              <div class="stat__value" id="bought30">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat__label">Last 30 $</div>
+              <div class="stat__value" id="spend30">$0.00</div>
+            </div>
+
+            <!-- Row 3 -->
             <div class="stat">
               <div class="stat__label">Lifetime hits</div>
               <div class="stat__value" id="lifeHits">0</div>
@@ -112,21 +125,15 @@
               <div class="stat__label">Lifetime $</div>
               <div class="stat__value" id="lifeSpend">$0.00</div>
             </div>
+
+            <!-- Row 4 -->
             <div class="stat">
-              <div class="stat__label">Bought</div>
-              <div class="stat__value" id="lifeBought">0</div>
-            </div>
-            <div class="stat">
-              <div class="stat__label">Avg / vape</div>
-              <div class="stat__value" id="avgPerVape">—</div>
-            </div>
-            <div class="stat">
-              <div class="stat__label">Avoided</div>
+              <div class="stat__label">Lifetime avoided</div>
               <div class="stat__value" id="lifeAvoided">0</div>
             </div>
             <div class="stat">
-              <div class="stat__label">Last buy</div>
-              <div class="stat__value stat__value--small" id="lastPurchase">—</div>
+              <div class="stat__label">Lifetime bought</div>
+              <div class="stat__value" id="lifeBought">0</div>
             </div>
           </div>
         </div>
@@ -178,7 +185,7 @@
 
           <div class="divider"></div>
 
-          <div class="stats-grid">
+          <div class="stats-grid drinking-stats-grid">
             <div class="stat">
               <div class="stat__label">Days since solo</div>
               <div class="stat__value" id="daysSinceSolo">—</div>
