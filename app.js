@@ -132,7 +132,6 @@ const lifeHitsEl = el("lifeHits");
 const lifeSpendEl = el("lifeSpend");
 const lifeAvoidedEl = el("lifeAvoided");
 const lifeBoughtEl = el("lifeBought");
-const lastPurchaseEl = el("lastPurchase");
 const lastPurchaseMiniEl = el("lastPurchaseMini");
 
 const rangeSelect = el("rangeSelect");
@@ -746,7 +745,6 @@ function renderVapes() {
   lifeSpendEl.textContent = fmtMoney(purchaseStats.totalSpend);
   lifeAvoidedEl.textContent = String(hitStats.avoided);
   lifeBoughtEl.textContent = String(purchaseStats.totalQty);
-  lastPurchaseEl.textContent = formatDateLabel(purchaseStats.lastPurchaseDate);
   lastPurchaseMiniEl.textContent = formatDateLabel(purchaseStats.lastPurchaseDate);
 
   renderDelayUI();
