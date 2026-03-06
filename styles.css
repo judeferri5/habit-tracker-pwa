@@ -132,6 +132,13 @@ body::before{
   margin-bottom:8px;
 }
 
+@media (max-width:640px){
+  .card-header--stack-mobile{
+    flex-direction:column;
+    align-items:stretch;
+  }
+}
+
 h2{
   margin:0;
   font-size:18px;
@@ -190,18 +197,18 @@ h2{
 
 .btn--ghost{ background: rgba(255,255,255,0.05); }
 
-.actions-3{
+.actions-4{
   display:grid;
-  grid-template-columns:1fr 1fr 1fr;
+  grid-template-columns:1fr 1fr;
   gap:10px;
 }
 
-@media (max-width:520px){
-  .actions-3{ grid-template-columns:1fr; }
+@media (min-width:760px){
+  .actions-4{ grid-template-columns:1fr 1fr 1fr 1fr; }
 }
 
 .btn--xl{
-  height:54px;
+  min-height:54px;
   font-size:16px;
   font-weight:900;
   border-radius:18px;
@@ -220,6 +227,13 @@ h2{
 }
 
 .btn--good:hover{ background: rgba(120,255,220,0.22); }
+
+.btn--money{
+  background: rgba(255,210,120,0.16);
+  border-color: rgba(255,210,120,0.28);
+}
+
+.btn--money:hover{ background: rgba(255,210,120,0.22); }
 
 .chip{
   padding:8px 10px;
@@ -292,6 +306,12 @@ h2{
   margin-top:6px;
   font-size:16px;
   font-weight:850;
+}
+
+.stat__value--small,
+.mini__value--small{
+  font-size:14px;
+  line-height:1.3;
 }
 
 .mini-metrics{
@@ -372,6 +392,10 @@ h2{
   overflow:hidden;
 }
 
+.modal--sm{
+  width:min(640px, calc(100% - 24px));
+}
+
 .modal__header{
   display:flex;
   justify-content:space-between;
@@ -388,8 +412,15 @@ h2{
   gap:10px;
 }
 
+.form-grid--two{
+  grid-template-columns:1fr 1fr;
+}
+
 @media (max-width:760px){
-  .form-grid{ grid-template-columns:1fr; }
+  .form-grid,
+  .form-grid--two{
+    grid-template-columns:1fr;
+  }
 }
 
 .field span{

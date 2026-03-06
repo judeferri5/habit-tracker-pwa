@@ -1,6 +1,6 @@
 /* Habit Tracker
    - Single source of truth: localStorage JSON state
-   - Vapes: hits per day, avoided cravings, delay lockout, settings, trend chart
+   - Vapes: hits per day, avoided cravings, purchases, delay lockout, trend chart
    - Drinking: per-day flags for solo + blackout, days-since metrics, 3-month Sun–Sat calendar
 */
 
@@ -34,21 +34,37 @@ function fmtMoney(n) {
   return val.toLocaleString(undefined, { style: "currency", currency: "USD" });
 }
 
+function formatDateLabel(iso) {
+  if (!iso) return "—";
+  return parseISO(iso).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
 function defaultState() {
   return {
     settings: {
       vapeDailyGoal: 10,
-      vapeDevicePrice: 13.0,
-      daysPerVape: 3,
       delayMinutes: 20
     },
     vapes: {
       days: {},
+      purchases: [],
       delayEndTs: 0
     },
     drinking: {
       days: {}
     }
+  };
+}
+
+function normalizePurchase(p) {
+  return {
+    date: typeof p?.date === "string" ? p.date : todayISO(),
+    quantity: clamp(parseInt(p?.quantity || "1", 10), 1, 9999),
+    totalPrice: clamp(parseFloat(p?.totalPrice || "0"), 0, 999999)
   };
 }
 
@@ -60,13 +76,19 @@ function loadState() {
     const parsed = JSON.parse(raw);
     const base = defaultState();
 
-    return {
+    const merged = {
       ...base,
       ...parsed,
       settings: { ...base.settings, ...(parsed.settings || {}) },
       vapes: { ...base.vapes, ...(parsed.vapes || {}) },
       drinking: { ...base.drinking, ...(parsed.drinking || {}) }
     };
+
+    merged.vapes.purchases = Array.isArray(merged.vapes.purchases)
+      ? merged.vapes.purchases.map(normalizePurchase)
+      : [];
+
+    return merged;
   } catch {
     return defaultState();
   }
@@ -100,12 +122,17 @@ const delayCountdown = el("delayCountdown");
 const btnAvoided = el("btnAvoided");
 const btnUndoVape = el("btnUndoVape");
 const btnClearTodayVapes = el("btnClearTodayVapes");
+const btnOpenPurchase = el("btnOpenPurchase");
 
 const vapeStreakEl = el("vapeStreak");
 const monthSpendEl = el("monthSpend");
 const lifeHitsEl = el("lifeHits");
 const lifeSpendEl = el("lifeSpend");
 const lifeAvoidedEl = el("lifeAvoided");
+const lifeBoughtEl = el("lifeBought");
+const avgPerVapeEl = el("avgPerVape");
+const lastPurchaseEl = el("lastPurchase");
+const lastPurchaseMiniEl = el("lastPurchaseMini");
 
 const rangeSelect = el("rangeSelect");
 const btnRefreshChart = el("btnRefreshChart");
@@ -122,17 +149,27 @@ const btnLogYesterday = el("btnLogYesterday");
 const activeDrinkLabel = el("activeDrinkLabel");
 const drinkCalendar = el("drinkCalendar");
 
+/* Settings modal */
 const btnOpenSettings = el("btnOpenSettings");
 const btnCloseSettings = el("btnCloseSettings");
 const modalBackdrop = el("modalBackdrop");
 const settingsModal = el("settingsModal");
 
 const inpDailyGoal = el("inpDailyGoal");
-const inpVapeDevicePrice = el("inpVapeDevicePrice");
-const inpDaysPerVape = el("inpDaysPerVape");
 const inpDelayMins = el("inpDelayMins");
 const btnSaveSettings = el("btnSaveSettings");
 const btnResetApp = el("btnResetApp");
+
+/* Purchase modal */
+const purchaseBackdrop = el("purchaseBackdrop");
+const purchaseModal = el("purchaseModal");
+const btnClosePurchase = el("btnClosePurchase");
+const inpPurchaseDate = el("inpPurchaseDate");
+const inpPurchaseQty = el("inpPurchaseQty");
+const inpPurchaseTotal = el("inpPurchaseTotal");
+const btnSavePurchase = el("btnSavePurchase");
+const btnUndoPurchase = el("btnUndoPurchase");
+const purchaseSummary = el("purchaseSummary");
 
 /* ---------- State ---------- */
 let state = loadState();
@@ -150,13 +187,10 @@ function setTab(which) {
 tabVapes.addEventListener("click", () => setTab("vapes"));
 tabDrinking.addEventListener("click", () => setTab("drinking"));
 
-/* ---------- Modal ---------- */
+/* ---------- Settings modal ---------- */
 function openSettings() {
   inpDailyGoal.value = state.settings.vapeDailyGoal;
-  inpVapeDevicePrice.value = state.settings.vapeDevicePrice;
-  inpDaysPerVape.value = state.settings.daysPerVape;
   inpDelayMins.value = state.settings.delayMinutes;
-
   modalBackdrop.hidden = false;
   settingsModal.hidden = false;
 }
@@ -172,13 +206,9 @@ modalBackdrop.addEventListener("click", closeSettings);
 
 btnSaveSettings.addEventListener("click", () => {
   const goal = clamp(parseInt(inpDailyGoal.value || "0", 10), 0, 9999);
-  const devicePrice = clamp(parseFloat(inpVapeDevicePrice.value || "0"), 0, 999999);
-  const daysPer = clamp(parseInt(inpDaysPerVape.value || "1", 10), 1, 9999);
   const mins = clamp(parseInt(inpDelayMins.value || "1", 10), 1, 9999);
 
   state.settings.vapeDailyGoal = goal;
-  state.settings.vapeDevicePrice = devicePrice;
-  state.settings.daysPerVape = daysPer;
   state.settings.delayMinutes = mins;
 
   saveState();
@@ -195,7 +225,82 @@ btnResetApp.addEventListener("click", () => {
   saveState();
   renderAll();
   closeSettings();
+  closePurchaseModal();
 });
+
+/* ---------- Purchase modal ---------- */
+function getLastPurchase() {
+  if (!state.vapes.purchases.length) return null;
+  return [...state.vapes.purchases].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return 0;
+  })[state.vapes.purchases.length - 1];
+}
+
+function openPurchaseModal() {
+  inpPurchaseDate.value = todayISO();
+  inpPurchaseQty.value = 1;
+  inpPurchaseTotal.value = "";
+  purchaseBackdrop.hidden = false;
+  purchaseModal.hidden = false;
+
+  const last = getLastPurchase();
+  purchaseSummary.textContent = last
+    ? `Last buy: ${formatDateLabel(last.date)} • ${last.quantity} for ${fmtMoney(last.totalPrice)}`
+    : "Spending is based only on purchases you log here.";
+}
+
+function closePurchaseModal() {
+  purchaseBackdrop.hidden = true;
+  purchaseModal.hidden = true;
+}
+
+function addPurchase() {
+  const date = inpPurchaseDate.value || todayISO();
+  const quantity = clamp(parseInt(inpPurchaseQty.value || "1", 10), 1, 9999);
+  const totalPrice = clamp(parseFloat(inpPurchaseTotal.value || "0"), 0, 999999);
+
+  if (!date) return;
+  if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
+    alert("Enter a total price greater than $0.");
+    return;
+  }
+
+  state.vapes.purchases.push({ date, quantity, totalPrice });
+  saveState();
+  closePurchaseModal();
+  renderAll();
+}
+
+function undoLastPurchase() {
+  if (!state.vapes.purchases.length) {
+    alert("No purchases to undo.");
+    return;
+  }
+
+  const purchasesSorted = [...state.vapes.purchases].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return 0;
+  });
+
+  const last = purchasesSorted[purchasesSorted.length - 1];
+  const idx = state.vapes.purchases.findIndex(
+    (p) => p.date === last.date && p.quantity === last.quantity && p.totalPrice === last.totalPrice
+  );
+
+  if (idx >= 0) {
+    state.vapes.purchases.splice(idx, 1);
+    saveState();
+    renderAll();
+    if (!purchaseModal.hidden) openPurchaseModal();
+  }
+}
+
+btnOpenPurchase.addEventListener("click", openPurchaseModal);
+btnClosePurchase.addEventListener("click", closePurchaseModal);
+purchaseBackdrop.addEventListener("click", closePurchaseModal);
+btnSavePurchase.addEventListener("click", addPurchase);
+btnUndoPurchase.addEventListener("click", undoLastPurchase);
 
 /* ---------- Vapes ---------- */
 function getVapeDay(iso) {
@@ -328,30 +433,45 @@ function calcVapeStreak() {
   return streak;
 }
 
-function calcLifetime() {
+function calcPurchaseStats() {
+  const purchases = [...state.vapes.purchases].sort((a, b) => a.date.localeCompare(b.date));
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+
+  let monthSpend = 0;
+  let totalSpend = 0;
+  let totalQty = 0;
+
+  for (const p of purchases) {
+    totalSpend += p.totalPrice;
+    totalQty += p.quantity;
+
+    const d = parseISO(p.date);
+    if (d.getFullYear() === y && d.getMonth() === m) {
+      monthSpend += p.totalPrice;
+    }
+  }
+
+  return {
+    monthSpend,
+    totalSpend,
+    totalQty,
+    avgPerVape: totalQty > 0 ? totalSpend / totalQty : null,
+    lastPurchaseDate: purchases.length ? purchases[purchases.length - 1].date : null
+  };
+}
+
+function calcLifetimeHitsAvoided() {
   let hits = 0;
   let avoided = 0;
-  const daysTracked = Object.keys(state.vapes.days).length;
 
   for (const iso of Object.keys(state.vapes.days)) {
     hits += state.vapes.days[iso]?.hits || 0;
     avoided += state.vapes.days[iso]?.avoided || 0;
   }
 
-  const estPerDay = state.settings.vapeDevicePrice / state.settings.daysPerVape;
-  const spend = estPerDay * daysTracked;
-
-  return { hits, avoided, spend };
-}
-
-function dayOfMonth() {
-  return new Date().getDate();
-}
-
-function calcThisMonthSpendEst() {
-  const daily = state.settings.vapeDevicePrice / state.settings.daysPerVape;
-  const elapsed = dayOfMonth();
-  return daily * elapsed;
+  return { hits, avoided };
 }
 
 /* ---------- Chart ---------- */
@@ -359,20 +479,21 @@ let vapeChart = null;
 
 function buildSeries(rangeValue) {
   const dates = allVapeDatesSorted();
-  if (dates.length === 0) return { labels: [], values: [] };
 
-  let useDates = dates;
+  if (rangeValue === "all") {
+    const labels = dates.map((iso) => iso.slice(5));
+    const values = dates.map((iso) => state.vapes.days[iso]?.hits || 0);
+    return { labels, values };
+  }
 
-  if (rangeValue !== "all") {
-    const n = parseInt(rangeValue, 10);
-    const end = todayISO();
-    const startDate = new Date(parseISO(end).getTime() - (n - 1) * 24 * 60 * 60 * 1000);
+  const n = parseInt(rangeValue, 10);
+  const end = todayISO();
+  const startDate = new Date(parseISO(end).getTime() - (n - 1) * 24 * 60 * 60 * 1000);
 
-    useDates = [];
-    for (let i = 0; i < n; i++) {
-      const d = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
-      useDates.push(todayISO(d));
-    }
+  const useDates = [];
+  for (let i = 0; i < n; i++) {
+    const d = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000);
+    useDates.push(todayISO(d));
   }
 
   const labels = useDates.map((iso) => iso.slice(5));
@@ -598,17 +719,21 @@ function renderVapes() {
 
   todayVapesEl.textContent = String(d.hits || 0);
   todayAvoidedEl.textContent = String(d.avoided || 0);
-
-  const estPerDay = state.settings.vapeDevicePrice / state.settings.daysPerVape;
-  todayGoalMeta.textContent = `Goal: ${state.settings.vapeDailyGoal} • Est/day: ${fmtMoney(estPerDay)}`;
+  todayGoalMeta.textContent = `Goal: ${state.settings.vapeDailyGoal} hits`;
 
   vapeStreakEl.textContent = String(calcVapeStreak());
-  monthSpendEl.textContent = fmtMoney(calcThisMonthSpendEst());
 
-  const life = calcLifetime();
-  lifeHitsEl.textContent = String(life.hits);
-  lifeSpendEl.textContent = fmtMoney(life.spend);
-  lifeAvoidedEl.textContent = String(life.avoided);
+  const hitStats = calcLifetimeHitsAvoided();
+  const purchaseStats = calcPurchaseStats();
+
+  monthSpendEl.textContent = fmtMoney(purchaseStats.monthSpend);
+  lifeHitsEl.textContent = String(hitStats.hits);
+  lifeSpendEl.textContent = fmtMoney(purchaseStats.totalSpend);
+  lifeAvoidedEl.textContent = String(hitStats.avoided);
+  lifeBoughtEl.textContent = String(purchaseStats.totalQty);
+  avgPerVapeEl.textContent = purchaseStats.avgPerVape == null ? "—" : fmtMoney(purchaseStats.avgPerVape);
+  lastPurchaseEl.textContent = formatDateLabel(purchaseStats.lastPurchaseDate);
+  lastPurchaseMiniEl.textContent = formatDateLabel(purchaseStats.lastPurchaseDate);
 
   renderDelayUI();
 }
